@@ -1,0 +1,8 @@
+node_modules/
+dist/
+config.json
+recordings/
+hls-segments/
+*.log
+.DS_Store
+.env

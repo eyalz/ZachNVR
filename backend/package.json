@@ -1,0 +1,21 @@
+{
+  "name": "zachnvr-backend",
+  "version": "1.0.0",
+  "description": "ZachNVR backend - ONVIF camera discovery, recording and HLS streaming",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "fluent-ffmpeg": "^2.1.2",
+    "node-onvif": "^0.2.5",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

@@ -1,0 +1,48 @@
+.camera-card {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  display: flex;
+  flex-direction: column;
+}
+.camera-card:hover { border-color: var(--accent); }
+.camera-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,142,247,0.25); }
+
+.camera-card-video {
+  flex: 1;
+  min-height: 160px;
+  background: #000;
+  position: relative;
+}
+
+.camera-card-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.camera-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface2);
+  flex-wrap: wrap;
+}
+
+.camera-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

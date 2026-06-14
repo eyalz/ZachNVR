@@ -1,0 +1,62 @@
+.cam-list { display: flex; flex-direction: column; gap: 10px; }
+
+.cam-row { display: flex; flex-direction: column; gap: 10px; }
+
+.cam-info { display: flex; flex-direction: column; gap: 6px; }
+
+.cam-main { display: flex; align-items: center; gap: 8px; }
+.cam-name { font-weight: 600; font-size: 15px; }
+
+.cam-meta { color: var(--text-muted); font-size: 12px; }
+.cam-url { font-family: monospace; }
+
+.cam-row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.cam-edit { display: flex; flex-direction: column; gap: 12px; }
+
+.form-inline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.form-row { display: flex; flex-direction: column; gap: 4px; }
+.form-row input { width: 100%; }
+
+.error-banner {
+  background: #3a1e1e;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.empty-state {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px;
+  line-height: 1.8;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  width: 420px;
+  max-width: 95vw;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.modal h2 { font-size: 16px; font-weight: 700; }
+.modal form { display: flex; flex-direction: column; gap: 12px; }
+.modal .form-row input { width: 100%; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }

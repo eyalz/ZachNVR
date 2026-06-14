@@ -1,0 +1,81 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --accent: #4f8ef7;
+  --accent-hover: #3a70d4;
+  --danger: #e05252;
+  --success: #52e09c;
+  --text: #e8eaf0;
+  --text-muted: #8a90a8;
+  --border: #2e3248;
+  --radius: 10px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: opacity 0.15s, background 0.15s;
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary   { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled)  { background: var(--accent-hover); }
+.btn-danger    { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled)   { opacity: 0.85; }
+.btn-ghost     { background: var(--surface2); color: var(--text); }
+.btn-ghost:hover:not(:disabled)    { background: var(--border); }
+.btn-success   { background: var(--success); color: #0f1117; }
+.btn-success:hover:not(:disabled)  { opacity: 0.85; }
+
+input, select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus { border-color: var(--accent); }
+
+label { color: var(--text-muted); font-size: 12px; display: block; margin-bottom: 4px; }
+
+.badge {
+  display: inline-block;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+.badge-online  { background: #1e3a2f; color: var(--success); }
+.badge-offline { background: #3a1e1e; color: var(--danger); }
+.badge-rec     { background: #3a1e1e; color: #f88; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}

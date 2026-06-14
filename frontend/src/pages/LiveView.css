@@ -1,0 +1,40 @@
+.lv-root { display: flex; flex-direction: column; height: 100%; }
+
+.lv-grid {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+}
+
+.lv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  color: var(--text-muted);
+  gap: 8px;
+  text-align: center;
+}
+
+.lv-single { display: flex; flex-direction: column; gap: 12px; }
+
+.lv-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.lv-tab {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+.lv-tab:hover { background: var(--border); color: var(--text); }
+.lv-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.lv-focus { height: calc(100vh - 180px); }
+.lv-focus .camera-card { height: 100%; }
+.lv-focus .camera-card-video { min-height: 0; flex: 1; }
+
+.active-layout { border: 1px solid var(--accent); color: var(--accent); }
