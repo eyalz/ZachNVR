@@ -1,65 +1,76 @@
 /**
  * discovery.js — ONVIF WS-Discovery for finding cameras on the local network.
+ * Uses the `onvif` npm package.
  */
-const onvif = require('node-onvif');
+const { Discovery, Cam } = require('onvif');
 const { v4: uuidv4 } = require('uuid');
 
 /**
  * Scan the local network using ONVIF WS-Discovery.
  * Returns an array of camera descriptors.
  */
-async function discoverCameras(timeoutMs = 5000) {
+function discoverCameras(timeoutMs = 5000) {
   return new Promise((resolve) => {
     const found = [];
+    const pending = [];
+
+    const timer = setTimeout(() => resolve(found), timeoutMs);
 
     try {
-      onvif.startProbe().then((deviceList) => {
-        const promises = deviceList.map(async (info) => {
-          try {
-            const device = new onvif.OnvifDevice({ xaddr: info.xaddrs[0] });
-            await device.init();
-            const profiles = device.getProfileList();
-            const streamUri = profiles.length > 0
-              ? await device.getUdpStreamUri(profiles[0].token).catch(() => null)
-              : null;
+      Discovery.probe({ timeout: timeoutMs }, (err, cameras) => {
+        if (err || !cameras || cameras.length === 0) {
+          clearTimeout(timer);
+          return resolve(found);
+        }
 
-            const rtspUrl = streamUri ? streamUri.uri : null;
+        cameras.forEach((camInfo) => {
+          const xaddr = Array.isArray(camInfo.xaddrs) ? camInfo.xaddrs[0] : camInfo.xaddrs;
+          const promise = new Promise((res) => {
+            const cam = new Cam({ hostname: '', xaddr }, function (err) {
+              if (err) {
+                found.push({
+                  id: uuidv4(),
+                  name: camInfo.name || camInfo.urn || 'ONVIF Camera',
+                  xaddr,
+                  urn: camInfo.urn,
+                  rtspUrl: null,
+                  username: '',
+                  password: '',
+                  record: false,
+                  online: false,
+                });
+                return res();
+              }
 
-            found.push({
-              id: uuidv4(),
-              name: info.name || info.urn || 'ONVIF Camera',
-              xaddr: info.xaddrs[0],
-              urn: info.urn,
-              rtspUrl,
-              username: '',
-              password: '',
-              record: false,
-              online: true,
+              // Try to get a stream URI from the first profile
+              this.getStreamUri({ protocol: 'RTSP' }, (err2, stream) => {
+                found.push({
+                  id: uuidv4(),
+                  name: camInfo.name || camInfo.urn || 'ONVIF Camera',
+                  xaddr,
+                  urn: camInfo.urn,
+                  rtspUrl: err2 ? null : (stream && stream.uri ? stream.uri : null),
+                  username: '',
+                  password: '',
+                  record: false,
+                  online: true,
+                });
+                res();
+              });
             });
-          } catch (_err) {
-            // Device init failed — still record basic info
-            found.push({
-              id: uuidv4(),
-              name: info.name || info.urn || 'ONVIF Camera',
-              xaddr: info.xaddrs[0],
-              urn: info.urn,
-              rtspUrl: null,
-              username: '',
-              password: '',
-              record: false,
-              online: false,
-            });
-          }
+          });
+          pending.push(promise);
         });
 
-        Promise.allSettled(promises).then(() => resolve(found));
-      }).catch(() => resolve([]));
+        Promise.allSettled(pending).then(() => {
+          clearTimeout(timer);
+          resolve(found);
+        });
+      });
     } catch (_e) {
+      clearTimeout(timer);
       resolve([]);
     }
-
-    // Hard timeout fallback
-    setTimeout(() => resolve(found), timeoutMs + 1000);
   });
 }
 
