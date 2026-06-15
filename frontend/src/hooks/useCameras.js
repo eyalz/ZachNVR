@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-
-const API = '/api';
+import { apiFetchJson } from '../lib/api';
 
 export function useCameras() {
   const [cameras, setCameras] = useState([]);
@@ -11,11 +10,10 @@ export function useCameras() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/cameras`);
-      const data = await res.json();
+      const data = await apiFetchJson('/cameras');
       setCameras(data.cameras || []);
     } catch (e) {
-      setError(e.message);
+      setError(`Cannot reach backend. ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -27,27 +25,25 @@ export function useCameras() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API}/discovery/scan`, { method: 'POST' });
-      const data = await res.json();
+      const data = await apiFetchJson('/discovery/scan', { method: 'POST' });
       setCameras(prev => {
         const map = Object.fromEntries(prev.map(c => [c.id, c]));
         (data.cameras || []).forEach(c => { map[c.id] = { ...map[c.id], ...c }; });
         return Object.values(map);
       });
     } catch (e) {
-      setError(e.message);
+      setError(`Cannot reach backend. ${e.message}`);
     } finally {
       setLoading(false);
     }
   }, []);
 
   const updateCamera = useCallback(async (id, updates) => {
-    const res = await fetch(`${API}/cameras/${id}`, {
+    const data = await apiFetchJson(`/cameras/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    const data = await res.json();
     if (data.camera) {
       setCameras(prev => prev.map(c => c.id === id ? { ...c, ...data.camera } : c));
     }
@@ -55,28 +51,26 @@ export function useCameras() {
   }, []);
 
   const addCamera = useCallback(async (payload) => {
-    const res = await fetch(`${API}/cameras`, {
+    const data = await apiFetchJson('/cameras', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
     if (data.camera) setCameras(prev => [...prev, data.camera]);
     return data;
   }, []);
 
   const deleteCamera = useCallback(async (id) => {
-    await fetch(`${API}/cameras/${id}`, { method: 'DELETE' });
+    await apiFetchJson(`/cameras/${id}`, { method: 'DELETE' });
     setCameras(prev => prev.filter(c => c.id !== id));
   }, []);
 
   const startLive = useCallback(async (id) => {
-    const res = await fetch(`${API}/cameras/${id}/live/start`, { method: 'POST' });
-    return res.json();
+    return apiFetchJson(`/cameras/${id}/live/start`, { method: 'POST' });
   }, []);
 
   const stopLive = useCallback(async (id) => {
-    await fetch(`${API}/cameras/${id}/live/stop`, { method: 'POST' });
+    await apiFetchJson(`/cameras/${id}/live/stop`, { method: 'POST' });
   }, []);
 
   return { cameras, loading, error, refresh: fetch_, scan, updateCamera, addCamera, deleteCamera, startLive, stopLive };

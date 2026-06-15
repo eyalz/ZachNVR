@@ -7,12 +7,25 @@
 const ffmpeg = require('fluent-ffmpeg');
 const path = require('path');
 const fs = require('fs');
+const { getCameras } = require('./config');
+
+const FFMPEG_CANDIDATES = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg'];
+for (const candidate of FFMPEG_CANDIDATES) {
+  if (fs.existsSync(candidate)) {
+    ffmpeg.setFfmpegPath(candidate);
+    break;
+  }
+}
+
+const MOTION_ONLY_RECORDING = process.env.MOTION_ONLY_RECORDING !== 'false';
 
 const RECORDINGS_DIR = path.join(__dirname, '../../recordings');
 const HLS_DIR = path.join(__dirname, '../../hls-segments');
 
 // Active FFmpeg processes: { cameraId: { record: FfmpegCommand|null, hls: FfmpegCommand|null } }
 const processes = {};
+const restartTimers = {};
+const RECORDING_RESTART_DELAY_MS = Number(process.env.RECORDING_RESTART_DELAY_MS || 5000);
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -28,6 +41,32 @@ function buildRtspUrl(camera) {
   } catch {
     return camera.rtspUrl;
   }
+}
+
+function getCameraById(cameraId) {
+  return getCameras().find(cam => cam.id === cameraId) || null;
+}
+
+function shouldRecordCamera(cameraId) {
+  const camera = getCameraById(cameraId);
+  return !!(camera && camera.record && camera.rtspUrl);
+}
+
+function clearRestartTimer(cameraId) {
+  if (!restartTimers[cameraId]) return;
+  clearTimeout(restartTimers[cameraId]);
+  delete restartTimers[cameraId];
+}
+
+function scheduleRecordingRestart(cameraId) {
+  if (restartTimers[cameraId]) return;
+  restartTimers[cameraId] = setTimeout(() => {
+    delete restartTimers[cameraId];
+    if (!shouldRecordCamera(cameraId)) return;
+    const camera = getCameraById(cameraId);
+    if (!camera) return;
+    startRecording(camera);
+  }, RECORDING_RESTART_DELAY_MS);
 }
 
 // ── HLS Live Streaming ────────────────────────────────────────────────────────
@@ -83,6 +122,7 @@ function stopHls(cameraId) {
 function startRecording(camera) {
   if (!camera.rtspUrl) return;
   if (processes[camera.id]?.record) return;
+  clearRestartTimer(camera.id);
 
   const recDir = path.join(RECORDINGS_DIR, camera.id);
   ensureDir(recDir);
@@ -91,18 +131,46 @@ function startRecording(camera) {
   const outputPath = path.join(recDir, `${timestamp}.mp4`);
   const rtspUrl = buildRtspUrl(camera);
 
+  const outputOptions = MOTION_ONLY_RECORDING
+    ? [
+      // Drop near-duplicate frames so output keeps only changes.
+      // When no motion happens, very few frames are written.
+      '-map 0:v:0',
+      '-map 0:a:0?',
+      '-vf mpdecimate=hi=768:lo=320:frac=0.1',
+      '-fps_mode vfr',
+      '-c:v libx264',
+      '-preset veryfast',
+      '-crf 24',
+      '-c:a aac',
+      '-b:a 128k',
+      '-movflags +frag_keyframe+empty_moov+default_base_moof',
+    ]
+    : [
+      '-map 0:v:0',
+      '-map 0:a:0?',
+      '-c:v copy',
+      '-c:a aac',
+      '-b:a 128k',
+      '-movflags +frag_keyframe+empty_moov+default_base_moof',
+    ];
+
   const cmd = ffmpeg(rtspUrl)
     .inputOptions(['-rtsp_transport tcp'])
-    .outputOptions(['-c copy', '-movflags +faststart'])
+    .outputOptions(outputOptions)
     .output(outputPath)
     .on('error', (err) => {
       if (!err.message.includes('SIGKILL')) {
         console.error(`[REC] Camera ${camera.id} error:`, err.message);
+        scheduleRecordingRestart(camera.id);
       }
       if (processes[camera.id]) processes[camera.id].record = null;
     })
     .on('end', () => {
       if (processes[camera.id]) processes[camera.id].record = null;
+      if (shouldRecordCamera(camera.id)) {
+        scheduleRecordingRestart(camera.id);
+      }
     });
 
   if (!processes[camera.id]) processes[camera.id] = {};
@@ -113,6 +181,7 @@ function startRecording(camera) {
 
 function stopRecording(cameraId) {
   const proc = processes[cameraId]?.record;
+  clearRestartTimer(cameraId);
   if (proc) {
     proc.kill('SIGKILL');
     processes[cameraId].record = null;

@@ -1,13 +1,36 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCameras } from '../hooks/useCameras';
 import CameraCard from '../components/CameraCard';
-import HlsPlayer from '../components/HlsPlayer';
 import './LiveView.css';
 
+const LIVE_VIEW_PREFS_KEY = 'zachnvr.liveView.prefs.v1';
+
+function loadLiveViewPrefs() {
+  try {
+    const raw = localStorage.getItem(LIVE_VIEW_PREFS_KEY);
+    if (!raw) {
+      return { selected: null, layout: 'grid', liveAnalyticsEnabled: true };
+    }
+
+    const parsed = JSON.parse(raw);
+    return {
+      selected: typeof parsed.selected === 'string' ? parsed.selected : null,
+      layout: parsed.layout === 'single' ? 'single' : 'grid',
+      liveAnalyticsEnabled: typeof parsed.liveAnalyticsEnabled === 'boolean' ? parsed.liveAnalyticsEnabled : true,
+    };
+  } catch {
+    return { selected: null, layout: 'grid', liveAnalyticsEnabled: true };
+  }
+}
+
 export default function LiveView() {
+  const initialPrefs = loadLiveViewPrefs();
+  const navigate = useNavigate();
   const { cameras, loading } = useCameras();
-  const [selected, setSelected] = useState(null); // single camera focus
-  const [layout, setLayout] = useState('grid'); // 'grid' | 'single'
+  const [selected, setSelected] = useState(initialPrefs.selected); // single camera focus
+  const [layout, setLayout] = useState(initialPrefs.layout); // 'grid' | 'single'
+  const [liveAnalyticsEnabled, setLiveAnalyticsEnabled] = useState(initialPrefs.liveAnalyticsEnabled);
 
   const recordingCameras = cameras.filter(c => c.record || c.rtspUrl);
 
@@ -17,6 +40,31 @@ export default function LiveView() {
   };
 
   const selectedCamera = cameras.find(c => c.id === selected);
+
+  useEffect(() => {
+    if (selected && !recordingCameras.some(c => c.id === selected)) {
+      setSelected(null);
+    }
+  }, [selected, recordingCameras]);
+
+  useEffect(() => {
+    localStorage.setItem(LIVE_VIEW_PREFS_KEY, JSON.stringify({
+      selected,
+      layout,
+      liveAnalyticsEnabled,
+    }));
+  }, [selected, layout, liveAnalyticsEnabled]);
+
+  const analyticsModeFor = (camId) => {
+    void camId;
+    if (!liveAnalyticsEnabled) return 'off';
+    // Always run full analytics so people/dog/face badges stay visible in both grid and single modes.
+    return 'full';
+  };
+
+  const handlePlay = (cam) => {
+    navigate(`/playback?camera=${encodeURIComponent(cam.id)}`);
+  };
 
   if (loading) {
     return <div className="lv-empty">Loading cameras…</div>;
@@ -36,6 +84,12 @@ export default function LiveView() {
       <div className="page-header">
         <h1>Live View</h1>
         <div className="actions">
+          <button
+            className={`btn-ghost ${liveAnalyticsEnabled ? 'active-layout' : ''}`}
+            onClick={() => setLiveAnalyticsEnabled(v => !v)}
+          >
+            {liveAnalyticsEnabled ? 'Live AI On' : 'Live AI Off'}
+          </button>
           <button
             className={`btn-ghost ${layout === 'grid' ? 'active-layout' : ''}`}
             onClick={() => { setLayout('grid'); setSelected(null); }}
@@ -59,6 +113,8 @@ export default function LiveView() {
               camera={cam}
               onSelect={handleSelect}
               isSelected={cam.id === selected}
+              onPlay={handlePlay}
+              liveAnalyticsMode={analyticsModeFor(cam.id)}
             />
           ))}
         </div>
@@ -78,7 +134,12 @@ export default function LiveView() {
           </div>
           {selectedCamera ? (
             <div className="lv-focus">
-              <CameraCard camera={selectedCamera} isSelected />
+              <CameraCard
+                camera={selectedCamera}
+                isSelected
+                onPlay={handlePlay}
+                liveAnalyticsMode={analyticsModeFor(selectedCamera.id)}
+              />
             </div>
           ) : (
             <div className="lv-empty">Select a camera above.</div>

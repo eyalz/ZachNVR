@@ -3,6 +3,8 @@ const router = express.Router();
 const { getCameras, updateCamera, removeCamera, upsertCamera } = require('../config');
 const { startRecording, stopRecording, startHls, stopHls, isHlsActive, isRecordingActive } = require('../recorder');
 const { v4: uuidv4 } = require('uuid');
+const { buildDefaultHikvisionRtspUrl } = require('../rtspDefaults');
+const { getCameraSnapshot } = require('../snapshot');
 
 // GET /api/cameras — list all saved cameras with live status
 router.get('/', (_req, res) => {
@@ -17,8 +19,18 @@ router.get('/', (_req, res) => {
 // POST /api/cameras — add a camera manually (with RTSP URL)
 router.post('/', (req, res) => {
   const { name, rtspUrl, username = '', password = '' } = req.body;
-  if (!rtspUrl) return res.status(400).json({ error: 'rtspUrl is required' });
-  const camera = { id: uuidv4(), name: name || 'Manual Camera', rtspUrl, username, password, record: false, online: true, xaddr: null, urn: null };
+  const normalizedRtspUrl = (rtspUrl || '').trim() || buildDefaultHikvisionRtspUrl();
+  const camera = {
+    id: uuidv4(),
+    name: name || 'Manual Camera',
+    rtspUrl: normalizedRtspUrl,
+    username,
+    password,
+    record: false,
+    online: true,
+    xaddr: null,
+    urn: null,
+  };
   upsertCamera(camera);
   res.status(201).json({ camera });
 });
@@ -64,6 +76,19 @@ router.post('/:id/live/start', (req, res) => {
 router.post('/:id/live/stop', (req, res) => {
   stopHls(req.params.id);
   res.json({ success: true });
+});
+
+// GET /api/cameras/:id/snapshot — capture or return cached JPEG snapshot
+router.get('/:id/snapshot', async (req, res) => {
+  const camera = getCameras().find(c => c.id === req.params.id);
+  if (!camera) return res.status(404).json({ error: 'Camera not found' });
+
+  try {
+    const url = await getCameraSnapshot(camera);
+    res.json({ url });
+  } catch (err) {
+    res.status(500).json({ error: 'Snapshot failed', detail: err.message });
+  }
 });
 
 module.exports = router;

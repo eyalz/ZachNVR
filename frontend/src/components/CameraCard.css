@@ -28,6 +28,43 @@
   font-size: 13px;
 }
 
+.camera-live-error {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  background: rgba(160, 20, 20, 0.88);
+  border: 1px solid rgba(255, 140, 140, 0.9);
+  color: #ffe8e8;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.25;
+  z-index: 2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.camera-live-subtitle {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  background: rgba(8, 12, 20, 0.72);
+  border: 1px solid rgba(160, 178, 208, 0.38);
+  color: #f3f7ff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+  z-index: 2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .camera-card-footer {
   display: flex;
   align-items: center;
@@ -45,4 +82,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.camera-play-btn {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.camera-play-btn:hover {
+  background: rgba(79, 142, 247, 0.12);
+}
+
+.badge-ai {
+  background: rgba(96, 181, 238, 0.16);
+  border: 1px solid rgba(96, 181, 238, 0.45);
+  color: #d8f1ff;
 }

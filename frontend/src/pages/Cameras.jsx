@@ -2,8 +2,15 @@ import { useState } from 'react';
 import { useCameras } from '../hooks/useCameras';
 import './Cameras.css';
 
+const DEFAULT_HIKVISION_RTSP = 'rtsp://10.0.0.64:554/Streaming/channels/101';
+
 function AddCameraModal({ onAdd, onClose }) {
-  const [form, setForm] = useState({ name: '', rtspUrl: '', username: '', password: '' });
+  const [form, setForm] = useState({
+    name: '',
+    rtspUrl: DEFAULT_HIKVISION_RTSP,
+    username: '',
+    password: '',
+  });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
@@ -23,7 +30,12 @@ function AddCameraModal({ onAdd, onClose }) {
           </div>
           <div className="form-row">
             <label>RTSP URL *</label>
-            <input required value={form.rtspUrl} onChange={e => set('rtspUrl', e.target.value)} placeholder="rtsp://192.168.1.x:554/stream" />
+            <input
+              required
+              value={form.rtspUrl}
+              onChange={e => set('rtspUrl', e.target.value)}
+              placeholder={DEFAULT_HIKVISION_RTSP}
+            />
           </div>
           <div className="form-row">
             <label>Username</label>

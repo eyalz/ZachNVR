@@ -3,6 +3,8 @@ dist/
 config.json
 recordings/
 hls-segments/
+recordings-analytics/
+recordings-descriptions/
 *.log
 .DS_Store
 .env
