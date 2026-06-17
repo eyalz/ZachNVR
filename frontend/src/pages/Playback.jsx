@@ -10,6 +10,7 @@ const GRID_COLS = 16;
 const GRID_ROWS = 9;
 const GRID_SIZE = GRID_COLS * GRID_ROWS;
 const TIMELINE_BINS = 96;
+const TIMELINE_ZOOM_LEVELS = [1, 2, 4];
 const INSIGHT_PREFS_KEY = 'zachnvr.playback.insightPrefs.v2';
 const KNOWN_FACES_KEY = 'zachnvr.playback.knownFaces.v1';
 const FACE_MATCH_THRESHOLD = 0.72;
@@ -51,6 +52,18 @@ function formatSize(bytes) {
 
 function formatDate(d) {
   return new Date(d).toLocaleString();
+}
+
+function formatTime(seconds) {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const secs = Math.floor(safe % 60);
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
 }
 
 function normalizeMask(mask) {
@@ -183,6 +196,9 @@ export default function Playback() {
 
   const [videoDuration, setVideoDuration] = useState(0);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [timelineHoverIndex, setTimelineHoverIndex] = useState(null);
+  const [timelineDragging, setTimelineDragging] = useState(false);
+  const [timelineZoom, setTimelineZoom] = useState(1);
 
   const videoRef = useRef(null);
   const faceOverlayCanvasRef = useRef(null);
@@ -191,6 +207,8 @@ export default function Playback() {
   const previousFrameRef = useRef(null);
   const movementHistoryRef = useRef([]);
   const timelineRef = useRef(Array.from({ length: TIMELINE_BINS }, () => 0));
+  const timelineTrackRef = useRef(null);
+  const timelineDraggingRef = useRef(false);
   const detectorRef = useRef(null);
   const detectorLoadingRef = useRef(false);
   const dogSignalHistoryRef = useRef([]);
@@ -911,14 +929,172 @@ export default function Playback() {
     return Array.from({ length: TIMELINE_BINS }, (_, i) => Math.max(Number(base[i] || 0), Number(localTimeline[i] || 0)));
   }, [backendAnalytics?.movementTimeline, localTimeline]);
 
+  const effectiveDuration = videoDuration || backendAnalytics?.duration || 0;
+  const currentTimelineIndex = effectiveDuration > 0
+    ? clamp(Math.floor((videoCurrentTime / effectiveDuration) * TIMELINE_BINS), 0, TIMELINE_BINS - 1)
+    : 0;
+  const visibleTimelineBins = clamp(Math.floor(TIMELINE_BINS / timelineZoom), 12, TIMELINE_BINS);
+  const timelineFocusIndex = timelineHoverIndex == null ? currentTimelineIndex : timelineHoverIndex;
+  const timelineWindowStart = clamp(
+    timelineFocusIndex - Math.floor(visibleTimelineBins / 2),
+    0,
+    Math.max(0, TIMELINE_BINS - visibleTimelineBins),
+  );
+  const timelineWindow = useMemo(() => (
+    Array.from({ length: visibleTimelineBins }, (_, i) => {
+      const globalIndex = timelineWindowStart + i;
+      return {
+        globalIndex,
+        value: Number(mergedTimeline[globalIndex] || 0),
+      };
+    })
+  ), [mergedTimeline, timelineWindowStart, visibleTimelineBins]);
+
+  const peakIndices = useMemo(() => {
+    const peaks = [];
+    for (let i = 1; i < mergedTimeline.length - 1; i += 1) {
+      const value = Number(mergedTimeline[i] || 0);
+      const prev = Number(mergedTimeline[i - 1] || 0);
+      const next = Number(mergedTimeline[i + 1] || 0);
+      if (value >= 0.18 && value >= prev && value >= next) {
+        peaks.push(i);
+      }
+    }
+
+    if (peaks.length) return peaks;
+
+    return mergedTimeline
+      .map((value, index) => ({ value: Number(value || 0), index }))
+      .filter(item => item.value >= 0.12)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+      .map(item => item.index)
+      .sort((a, b) => a - b);
+  }, [mergedTimeline]);
+
+  const markerRatios = [0, 0.25, 0.5, 0.75, 1];
+  const timelineMarkers = markerRatios.map(ratio => {
+    const globalIndex = timelineWindowStart + Math.round(ratio * Math.max(1, visibleTimelineBins - 1));
+    const time = (globalIndex / Math.max(1, TIMELINE_BINS - 1)) * effectiveDuration;
+    return { ratio, time };
+  });
+
+  const hoverTime = timelineHoverIndex == null
+    ? null
+    : (timelineHoverIndex / Math.max(1, TIMELINE_BINS - 1)) * effectiveDuration;
+
   const handleTimelineSeek = (index) => {
     const video = videoRef.current;
     if (!video) return;
-    const duration = Number.isFinite(video.duration) ? video.duration : backendAnalytics?.duration || 0;
+    const duration = Number.isFinite(video.duration) ? video.duration : effectiveDuration;
     if (!duration) return;
-    const t = (index / TIMELINE_BINS) * duration;
+    const clampedIndex = clamp(index, 0, TIMELINE_BINS - 1);
+    const t = (clampedIndex / Math.max(1, TIMELINE_BINS - 1)) * duration;
     video.currentTime = clamp(t, 0, duration);
   };
+
+  const seekToTime = (seconds) => {
+    const video = videoRef.current;
+    if (!video || !effectiveDuration) return;
+    video.currentTime = clamp(seconds, 0, effectiveDuration);
+  };
+
+  const seekBy = (deltaSeconds) => {
+    seekToTime((videoCurrentTime || 0) + deltaSeconds);
+  };
+
+  const seekFromClientX = (clientX) => {
+    const track = timelineTrackRef.current;
+    if (!track || !effectiveDuration) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    const idx = clamp(
+      timelineWindowStart + Math.round(ratio * Math.max(1, visibleTimelineBins - 1)),
+      0,
+      TIMELINE_BINS - 1,
+    );
+    setTimelineHoverIndex(idx);
+    handleTimelineSeek(idx);
+  };
+
+  const onTimelineMouseDown = (event) => {
+    if (!effectiveDuration) return;
+    event.preventDefault();
+    timelineDraggingRef.current = true;
+    setTimelineDragging(true);
+    seekFromClientX(event.clientX);
+  };
+
+  const onTimelineMouseMove = (event) => {
+    const track = timelineTrackRef.current;
+    if (!track || !effectiveDuration) return;
+    const rect = track.getBoundingClientRect();
+    const ratio = clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    const idx = clamp(Math.round(ratio * (TIMELINE_BINS - 1)), 0, TIMELINE_BINS - 1);
+    setTimelineHoverIndex(idx);
+    if (timelineDraggingRef.current) {
+      handleTimelineSeek(idx);
+    }
+  };
+
+  const onTimelineTouchStart = (event) => {
+    if (!effectiveDuration) return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    timelineDraggingRef.current = true;
+    setTimelineDragging(true);
+    seekFromClientX(touch.clientX);
+  };
+
+  const onTimelineTouchMove = (event) => {
+    if (!timelineDraggingRef.current || !effectiveDuration) return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    seekFromClientX(touch.clientX);
+  };
+
+  const onTimelineKeyDown = (event) => {
+    if (!effectiveDuration) return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      seekBy(event.shiftKey ? -10 : -5);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      seekBy(event.shiftKey ? 10 : 5);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      seekToTime(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      seekToTime(effectiveDuration);
+    }
+  };
+
+  const jumpToPeak = (direction) => {
+    if (!peakIndices.length) return;
+    if (direction > 0) {
+      const next = peakIndices.find(idx => idx > currentTimelineIndex);
+      handleTimelineSeek(next == null ? peakIndices[0] : next);
+      return;
+    }
+    const prev = [...peakIndices].reverse().find(idx => idx < currentTimelineIndex);
+    handleTimelineSeek(prev == null ? peakIndices[peakIndices.length - 1] : prev);
+  };
+
+  useEffect(() => {
+    const stopDrag = () => {
+      if (!timelineDraggingRef.current) return;
+      timelineDraggingRef.current = false;
+      setTimelineDragging(false);
+    };
+
+    window.addEventListener('mouseup', stopDrag);
+    window.addEventListener('touchend', stopDrag);
+    return () => {
+      window.removeEventListener('mouseup', stopDrag);
+      window.removeEventListener('touchend', stopDrag);
+    };
+  }, []);
 
   const totalRecordingBytes = recordings.reduce((sum, rec) => sum + (Number(rec.size) || 0), 0);
   const oldestRecording = recordings.length
@@ -1057,21 +1233,62 @@ export default function Playback() {
                 <div className="pb-timeline-wrap-inline">
                   <div className="pb-timeline-labels">
                     <span>Smart Timeline</span>
-                    <span>{videoCurrentTime.toFixed(1)}s / {(videoDuration || backendAnalytics?.duration || 0).toFixed(1)}s</span>
+                    <span>{formatTime(videoCurrentTime)} / {formatTime(effectiveDuration)}</span>
                   </div>
-                  <div className="pb-timeline-bars">
-                    {mergedTimeline.map((v, idx) => (
+                  <div className="pb-timeline-actions">
+                    <button type="button" className="pb-time-jump-btn" onClick={() => jumpToPeak(-1)}>Prev Peak</button>
+                    <button type="button" className="pb-time-jump-btn" onClick={() => jumpToPeak(1)}>Next Peak</button>
+                    <button type="button" className="pb-time-jump-btn" onClick={() => seekBy(-10)}>-10s</button>
+                    <button type="button" className="pb-time-jump-btn" onClick={() => seekBy(-5)}>-5s</button>
+                    <button type="button" className="pb-time-jump-btn" onClick={() => seekBy(5)}>+5s</button>
+                    <button type="button" className="pb-time-jump-btn" onClick={() => seekBy(10)}>+10s</button>
+                    {TIMELINE_ZOOM_LEVELS.map(level => (
                       <button
-                        key={idx}
+                        key={level}
                         type="button"
-                        className={`pb-time-bar ${videoDuration ? (idx / TIMELINE_BINS) <= (videoCurrentTime / videoDuration) ? 'past' : '' : ''}`}
-                        style={{ '--h': `${Math.max(8, Math.round(v * 100))}%` }}
-                        onClick={() => handleTimelineSeek(idx)}
-                        title={`Jump to ${Math.round((idx / TIMELINE_BINS) * (videoDuration || backendAnalytics?.duration || 0))}s`}
+                        className={`pb-time-jump-btn ${timelineZoom === level ? 'active' : ''}`}
+                        onClick={() => setTimelineZoom(level)}
+                        title={`Show ${Math.floor(TIMELINE_BINS / level)} bins`}
+                      >
+                        {level}x
+                      </button>
+                    ))}
+                    <span className="pb-timeline-target">Target {formatTime(hoverTime == null ? videoCurrentTime : hoverTime)}</span>
+                  </div>
+                  <div
+                    ref={timelineTrackRef}
+                    className={`pb-timeline-track ${timelineDragging ? 'dragging' : ''}`}
+                    role="slider"
+                    aria-label="Smart timeline seek"
+                    aria-valuemin={0}
+                    aria-valuemax={Math.max(0, Math.round(effectiveDuration))}
+                    aria-valuenow={Math.max(0, Math.round(videoCurrentTime))}
+                    tabIndex={0}
+                    onKeyDown={onTimelineKeyDown}
+                    onMouseDown={onTimelineMouseDown}
+                    onMouseMove={onTimelineMouseMove}
+                    onMouseLeave={() => setTimelineHoverIndex(null)}
+                    onTouchStart={onTimelineTouchStart}
+                    onTouchMove={onTimelineTouchMove}
+                  >
+                    <div className="pb-timeline-bars" style={{ '--timeline-bins': visibleTimelineBins }}>
+                    {timelineWindow.map(({ globalIndex, value }) => (
+                      <span
+                        key={globalIndex}
+                        className={`pb-time-bar ${globalIndex <= currentTimelineIndex ? 'past' : ''} ${timelineHoverIndex === globalIndex ? 'hover' : ''}`}
+                        style={{ '--h': `${Math.max(8, Math.round(value * 100))}%` }}
+                        title={`Jump to ${formatTime((globalIndex / Math.max(1, TIMELINE_BINS - 1)) * effectiveDuration)}`}
                       />
                     ))}
+                    </div>
+                    <div className="pb-timeline-playhead" style={{ left: `${(effectiveDuration > 0 ? (videoCurrentTime / effectiveDuration) : 0) * 100}%` }} />
                   </div>
-                  <div className="pb-timeline-status">{analyticsLoading ? 'Analyzing recording...' : 'Click bars to jump to motion peaks'}</div>
+                  <div className="pb-timeline-markers">
+                    {timelineMarkers.map(marker => (
+                      <span key={marker.ratio}>{formatTime(marker.time)}</span>
+                    ))}
+                  </div>
+                  <div className="pb-timeline-status">{analyticsLoading ? 'Analyzing recording...' : `Drag to scrub, arrow keys to nudge, ${peakIndices.length} motion peaks found`}</div>
                 </div>
               )}
 

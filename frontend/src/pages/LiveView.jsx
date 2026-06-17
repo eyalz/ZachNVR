@@ -42,10 +42,11 @@ export default function LiveView() {
   const selectedCamera = cameras.find(c => c.id === selected);
 
   useEffect(() => {
+    if (loading) return;
     if (selected && !recordingCameras.some(c => c.id === selected)) {
       setSelected(null);
     }
-  }, [selected, recordingCameras]);
+  }, [selected, recordingCameras, loading]);
 
   useEffect(() => {
     localStorage.setItem(LIVE_VIEW_PREFS_KEY, JSON.stringify({
@@ -92,7 +93,7 @@ export default function LiveView() {
           </button>
           <button
             className={`btn-ghost ${layout === 'grid' ? 'active-layout' : ''}`}
-            onClick={() => { setLayout('grid'); setSelected(null); }}
+            onClick={() => { setLayout('grid'); }}
           >⊞ Grid</button>
           <button
             className={`btn-ghost ${layout === 'single' ? 'active-layout' : ''}`}
